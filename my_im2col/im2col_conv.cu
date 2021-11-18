@@ -1,32 +1,11 @@
 #include <iostream>
 #include <stdlib.h>
 #include "gen_img_kernel.h"
+#include <time.h>
+#define TOTAL_RUN 10
 
-void im2colOnHost(Matrix &image, Matrix &colOutHost, int pad, int stride, int ksize);
-//kernel functions
-//num_kernels = output channel number
-//gpu_image.channels = input channel number
-// numWIndowPerRow = (gpu_image.width - ksize + 1) / stride
-__global__ void im2col(Matrix gpu_image, Matrix gpu_colOut, int ksize, int stride) {
-    for (int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    idx < gpu_colOut.height * gpu_colOut.width; idx += blockDim.x * gridDim.x) {
-        int colOutIdy = idx / gpu_colOut.width; //index of slide window
-        int colOutIdx = idx % gpu_colOut.width;
-        int numWindowPerRow = (gpu_image.width - ksize + 1) / stride;
-        int numWindowPerCol = (gpu_image.height - ksize + 1) / stride;
-        int numWindowPerChannel = numWindowPerRow * numWindowPerCol;
-        int windowIdy = colOutIdy / numWindowPerRow;
-        int windowIdx = colOutIdy % numWindowPerRow;
-        int channelIdy = colOutIdy / numWindowPerChannel;
-        int eleInWindowIdy = colOutIdx / ksize;
-        int eleInWindonIdx = colOutIdx % ksize;
-        int inIdy = channelIdy * (ksize-1) + windowIdy + eleInWindowIdy; //-1 wrong in diff stride
-        int inIdx = windowIdx + eleInWindonIdx;
-        gpu_colOut.elements[colOutIdy * gpu_colOut.width + colOutIdx] = 
-                            gpu_image.elements[inIdy*gpu_image.width + inIdx];
-        // printf("idx: %d, %d\n", idx, gpu_image.elements[inIdy*gpu_image.width + inIdx]);
-    }
-}
+void im2colOnHost(Matrix&, Matrix&, int, int, int);
+__global__ void im2col(Matrix, Matrix, int, int, int, int, int);
 
 //Host code
 int main()
@@ -56,8 +35,8 @@ int main()
     // /*
     //For debug: serial result on host 
     im2colOnHost(image, outHost, pad, stride, ksize);    
-    printMatrix(image, "image");
-    printMatrix(outHost, "colOutHost"); 
+    // printMatrix(image, "image");
+    // printMatrix(outHost, "colOutHost"); 
     // */
 
     transferToDevice(image, gpu_image);
@@ -67,20 +46,34 @@ int main()
     gpu_Colout.width = ksize * ksize; //width of each row = kernel size
     int numWindowPerRow = (gpu_image.width - ksize) / stride + 1;
     int numWindowPerCol = (gpu_image.height - ksize) / stride + 1;
-    
-    // int a = (width - ksize) / stride + 1;
-    // int b = (height - ksize) / stride + 1;
-    gpu_Colout.height = numWindowPerRow*numWindowPerCol*channels ; //KERNEL_NUM
+    int numWindowPerChannel = numWindowPerRow * numWindowPerCol; //number of lside window in each image channel
+    int kernelNum = numWindowPerChannel * channels;
+    gpu_Colout.height = kernelNum; //KERNEL_NUM
     gpu_Colout.channels = 1;
     gpu_Colout.batch_size = 1;
-    cudaMalloc((void**) &gpu_Colout.elements, sizeof(float)*gpu_Colout.height * gpu_Colout.width);  
-    int blockSize = 1; //ksize * ksize;
-    int gridSize = 1; //gpu_Colout.height; 
-    printMatrix(image, "image");
-    printf("gpu_Out width: %d height: %d\n", gpu_Colout.width, gpu_Colout.height);
-    im2col<<<gridSize, blockSize>>>(gpu_image, gpu_Colout, ksize, stride);
+    cudaMalloc((void**) &gpu_Colout.elements, sizeof(float)*gpu_Colout.height * gpu_Colout.width * gpu_Colout.channels);  
 
-
+    struct timespec start, stop;
+    double oneTime, totalTime;
+    //Mesure effect of different block size
+    printf("blockSize, gridSize, avgTime\n");
+    for (int blockSize=1; blockSize < 2048; blockSize*=2) {
+        //total number of thread < 2 * (number elements in outCol)
+        unsigned int MAX_GRID_SIZE = (kernelNum + blockSize - 1) / blockSize; 
+        for (int gridSize=1; gridSize <= MAX_GRID_SIZE; gridSize*=2) {
+            totalTime = 0;
+            for (int i=0; i < TOTAL_RUN; i++) {
+                clock_gettime(CLOCK_REALTIME, &start);
+                im2col<<<gridSize, blockSize>>>(gpu_image, gpu_Colout, ksize, 
+                            stride, numWindowPerRow, numWindowPerCol, numWindowPerChannel);
+                clock_gettime(CLOCK_REALTIME, &stop);
+                oneTime = (stop.tv_sec - start.tv_sec) * 1e9 + (double)(stop.tv_nsec - start.tv_nsec);
+                totalTime += oneTime;
+            }
+            printf("%d, %d, %.3f\n", blockSize, gridSize, totalTime / TOTAL_RUN);
+        }
+    }
+    
     Matrix cuColout;
     cuColout.width = gpu_Colout.width; //each row is of kernel size
     cuColout.height = gpu_Colout.height ;//KERNEL_NUM
@@ -88,7 +81,7 @@ int main()
     cuColout.batch_size = gpu_Colout.batch_size;
     std::cout<<"\n";
     transferFromDevice(gpu_Colout, cuColout);
-    printMatrix(cuColout, "cuColout");
+    // printMatrix(cuColout, "cuColout");
 
     for (int i=0; i<cuColout.width * cuColout.height; i++) {
         if (cuColout.elements[i] != outHost.elements[i]) {
@@ -104,11 +97,11 @@ int main()
 }
 
 void im2colOnHost(Matrix &image, Matrix &colOutHost, int pad, int stride, int ksize) {
-    std::cout<<"image: "<<image.width<<" " << image.height << " " << image.channels << "\n";
+    // std::cout<<"image: "<<image.width<<" " << image.height << " " << image.channels << "\n";
     int outWidth = (image.width - ksize) / stride + 1; //(image.width + 2*pad - ksize) / stride + 1;
     int outHeight = (image.height - ksize) / stride + 1; //(image.height + 2*pad - ksize) / stride + 1;
     int colOutHeight = outWidth * outHeight * image.channels;
-    std::cout<<"out: "<<outWidth<<" " << outHeight << "\n";
+    // std::cout<<"out: "<<outWidth<<" " << outHeight << "\n";
     colOutHost.height = colOutHeight;
     colOutHost.width = ksize * ksize;
     colOutHost.channels = 1;
@@ -132,4 +125,24 @@ void im2colOnHost(Matrix &image, Matrix &colOutHost, int pad, int stride, int ks
         }
     }
     // std::cout << "\n";
+}
+
+
+//kernel functions
+__global__ void im2col(Matrix gpu_image, Matrix gpu_colOut, int ksize, int stride, 
+                            int numWindowPerRow, int numWindowPerCol, int numWindowPerChannel) {
+    for (int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    idx < gpu_colOut.height * gpu_colOut.width; idx += blockDim.x * gridDim.x) {
+        int colOutIdy = idx / gpu_colOut.width; //index of slide window
+        int colOutIdx = idx % gpu_colOut.width;
+        int windowIdy = colOutIdy / numWindowPerRow;
+        int windowIdx = colOutIdy % numWindowPerRow;
+        int channelIdy = colOutIdy / numWindowPerChannel;
+        int eleInWindowIdy = colOutIdx / ksize;
+        int eleInWindonIdx = colOutIdx % ksize;
+        int inIdy = channelIdy * (ksize-1) + windowIdy + eleInWindowIdy; //Todo: -1 wrong in diff stride
+        int inIdx = windowIdx + eleInWindonIdx;
+        gpu_colOut.elements[colOutIdy * gpu_colOut.width + colOutIdx] = 
+                            gpu_image.elements[inIdy*gpu_image.width + inIdx];
+    }
 }
