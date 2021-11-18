@@ -17,7 +17,7 @@ void init_data(float *data, int size) {
     }
 }
 
-void generate_data(Matrix &image, Matrix &kernel, Matrix &gpu_out, int height, int width,
+void generate_data(Matrix &image, Matrix &kernel, int height, int width,
             int channels, int batch_size, int ksize, int num_kernels, int pad, int stride) {
     image.width = width;
     image.height = height;
@@ -35,13 +35,6 @@ void generate_data(Matrix &image, Matrix &kernel, Matrix &gpu_out, int height, i
     kernel.elements = (float*) malloc(kernelSize * sizeof(float));
     init_data(kernel.elements, kernelSize);
     // std::cout<<kernel.elements[0];
-
-    gpu_out.width = (image.width - ksize) / stride + 1;//(width + 2*pad - ksize) / stride + 1;
-    gpu_out.height = (image.height - ksize) / stride + 1;//(height + 2*pad - ksize) / stride + 1;
-    gpu_out.channels = num_kernels;
-    gpu_out.batch_size = batch_size;
-    int outSize = gpu_out.width * gpu_out.height * gpu_out.channels * gpu_out.batch_size;
-    cudaMalloc((void**) &gpu_out.elements, outSize * sizeof(float));
 }
 
 
@@ -69,13 +62,6 @@ void transferFromDevice(Matrix &gpu_out, Matrix &out){
     int outSize = gpu_out.width * gpu_out.height * gpu_out.batch_size * gpu_out.channels ;
     out.elements = (float*) malloc(outSize * sizeof(float));
     cudaMemcpy(out.elements, gpu_out.elements, sizeof(float) * outSize, cudaMemcpyDeviceToHost);
-}
-
-void freeDevice(Matrix &gpu_image, Matrix &gpu_kernel, Matrix &gpu_out, Matrix &gpu_Colout) {
-    cudaFree(gpu_image.elements);
-    cudaFree(gpu_kernel.elements);
-    cudaFree(gpu_out.elements);
-    cudaFree(gpu_Colout.elements);
 }
 
 

@@ -1,8 +1,9 @@
 #include <iostream>
 #include <stdlib.h>
-#include "gen_img_kernel.h"
+#include "common.h"
 #include <time.h>
-#define TOTAL_RUN 10
+#include <fstream>
+#define TOTAL_RUN 2
 
 void im2colOnHost(Matrix&, Matrix&, int, int, int);
 __global__ void im2col(Matrix, Matrix, int, int, int, int, int);
@@ -11,26 +12,24 @@ __global__ void im2col(Matrix, Matrix, int, int, int, int, int);
 int main()
 {
     //image width, height, channel, batch size
-    const int height = 5; //256
-	const int width = 4; //256
-	const int channels = 4;
-	const int batch_size = 1;//128;
+    int height = 256;
+	int width = 256;
+	int channels = 80;
+	int batch_size = 1;//128;
     //kernel size, channel
-	const int ksize = 3; // 5-11
-	const int num_kernels = 2;
+	int ksize = 3; // 5-11
+	int num_kernels = 2;
     //conv padding and stride
-    const int pad = 1; // 0-2
-	const int stride = 1; // 1
+    int pad = 1; // 0-2
+	int stride = 1; // 1
 
     Matrix image;
     Matrix kernel;
-    Matrix out;
     Matrix outHost;
     Matrix gpu_image;
     Matrix gpu_kernel;
-    Matrix gpu_out;
-    generate_data(image, kernel, gpu_out, height, width, channels, 
-    batch_size, ksize, num_kernels, stride, pad);
+    generate_data(image, kernel, height, width, channels, 
+                        batch_size, ksize, num_kernels, stride, pad);
 
     // /*
     //For debug: serial result on host 
@@ -56,11 +55,16 @@ int main()
     struct timespec start, stop;
     double oneTime, totalTime;
     //Mesure effect of different block size
-    printf("blockSize, gridSize, avgTime\n");
+    // printf("blockSize, gridSize, avgTime\n");
+    std::fstream fperflog("perflog.csv", std::ios::out);
+    fperflog << "numThread, blockSize, gridSize, avgTime" << std::endl;
     for (int blockSize=1; blockSize < 2048; blockSize*=2) {
         //total number of thread < 2 * (number elements in outCol)
         unsigned int MAX_GRID_SIZE = (kernelNum + blockSize - 1) / blockSize; 
-        for (int gridSize=1; gridSize <= MAX_GRID_SIZE; gridSize*=2) {
+        for (int gridSize=1; gridSize <= 2048; gridSize*=2) {
+            if (gridSize >= MAX_GRID_SIZE) {
+                continue;
+            }
             totalTime = 0;
             for (int i=0; i < TOTAL_RUN; i++) {
                 clock_gettime(CLOCK_REALTIME, &start);
@@ -70,29 +74,32 @@ int main()
                 oneTime = (stop.tv_sec - start.tv_sec) * 1e9 + (double)(stop.tv_nsec - start.tv_nsec);
                 totalTime += oneTime;
             }
-            printf("%d, %d, %.3f\n", blockSize, gridSize, totalTime / TOTAL_RUN);
+            fperflog <<blockSize * gridSize << "," <<  blockSize << ","             
+                                      << gridSize << "," << totalTime / TOTAL_RUN << std::endl;
         }
     }
-    
-    Matrix cuColout;
-    cuColout.width = gpu_Colout.width; //each row is of kernel size
-    cuColout.height = gpu_Colout.height ;//KERNEL_NUM
-    cuColout.channels = gpu_Colout.channels;
-    cuColout.batch_size = gpu_Colout.batch_size;
-    std::cout<<"\n";
-    transferFromDevice(gpu_Colout, cuColout);
-    // printMatrix(cuColout, "cuColout");
+    fperflog.close();
 
-    for (int i=0; i<cuColout.width * cuColout.height; i++) {
-        if (cuColout.elements[i] != outHost.elements[i]) {
+    Matrix colOutDev;
+    colOutDev.width = gpu_Colout.width; //each row is of kernel size
+    colOutDev.height = gpu_Colout.height ;//KERNEL_NUM
+    colOutDev.channels = gpu_Colout.channels;
+    colOutDev.batch_size = gpu_Colout.batch_size;
+    std::cout<<"\n";
+    transferFromDevice(gpu_Colout, colOutDev);
+    // printMatrix(colOutDev, "colOutDev");
+
+    for (int i=0; i<colOutDev.width * colOutDev.height; i++) {
+        if (colOutDev.elements[i] != outHost.elements[i]) {
             std::cout<< "wrong in index: " << i << '\n';
         }
     }
 
-    // transferFromDevice(gpu_out, out);
     // printMatrix(out, "out");
+    cudaFree(image.elements);
+    cudaFree(kernel.elements);
+    cudaFree(colOutDev.elements);    
     free_data(image, kernel);
-    freeDevice(gpu_image, gpu_kernel, gpu_out, cuColout);
     return 0;
 }
 
