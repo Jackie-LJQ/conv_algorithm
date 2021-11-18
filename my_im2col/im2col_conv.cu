@@ -32,9 +32,9 @@ __global__ void im2col(Matrix gpu_image, Matrix gpu_colOut, int ksize, int strid
 int main()
 {
     //image width, height, channel, batch size
-    const int height = 1024; //256
+    const int height = 5; //256
 	const int width = 4; //256
-	const int channels = 3;
+	const int channels = 4;
 	const int batch_size = 1;//128;
     //kernel size, channel
 	const int ksize = 3; // 5-11
@@ -53,22 +53,24 @@ int main()
     generate_data(image, kernel, gpu_out, height, width, channels, 
     batch_size, ksize, num_kernels, stride, pad);
 
-    /*
+    // /*
     //For debug: serial result on host 
     im2colOnHost(image, outHost, pad, stride, ksize);    
     printMatrix(image, "image");
     printMatrix(outHost, "colOutHost"); 
-    */
+    // */
 
     transferToDevice(image, gpu_image);
     transferToDevice(kernel, gpu_kernel);
 
     Matrix gpu_Colout;
     gpu_Colout.width = ksize * ksize; //width of each row = kernel size
+    int numWindowPerRow = (gpu_image.width - ksize) / stride + 1;
+    int numWindowPerCol = (gpu_image.height - ksize) / stride + 1;
     
-    int a = (width - ksize) / stride + 1;
-    int b = (height - ksize) / stride + 1;
-    gpu_Colout.height = a*b*channels ;//KERNEL_NUM
+    // int a = (width - ksize) / stride + 1;
+    // int b = (height - ksize) / stride + 1;
+    gpu_Colout.height = numWindowPerRow*numWindowPerCol*channels ; //KERNEL_NUM
     gpu_Colout.channels = 1;
     gpu_Colout.batch_size = 1;
     cudaMalloc((void**) &gpu_Colout.elements, sizeof(float)*gpu_Colout.height * gpu_Colout.width);  
@@ -86,13 +88,13 @@ int main()
     cuColout.batch_size = gpu_Colout.batch_size;
     std::cout<<"\n";
     transferFromDevice(gpu_Colout, cuColout);
-    // printMatrix(cuColout, "cuColout");
+    printMatrix(cuColout, "cuColout");
 
-    // for (int i=0; i<cuColout.width * cuColout.height; i++) {
-    //     if (cuColout.elements[i] != outHost.elements[i]) {
-    //         std::cout<< "wrong in index: " << i << '\n';
-    //     }
-    // }
+    for (int i=0; i<cuColout.width * cuColout.height; i++) {
+        if (cuColout.elements[i] != outHost.elements[i]) {
+            std::cout<< "wrong in index: " << i << '\n';
+        }
+    }
 
     // transferFromDevice(gpu_out, out);
     // printMatrix(out, "out");
