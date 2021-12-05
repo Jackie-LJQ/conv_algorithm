@@ -8,17 +8,17 @@
 #include "util.h"
 
 int main() {
-  int nTest = 10, totalTime = 0, i;
+  int num_test = 10, totalTime = 0, i;
   cudaSetDevice(0);
 
-  for (i = 0; i < nTest; i++) {
+  for (i = 0; i < num_test; i++) {
     printf("---- Iter: %d ----\n", i);
     int res = -1;
     res = kernel_128();
     totalTime += res;
   }
   printf(
-      "Average Total Time: %d us\n", totalTime / nTest);
+      "Average Total Time: %d us\n", totalTime / num_test);
 
   return 0;
 }

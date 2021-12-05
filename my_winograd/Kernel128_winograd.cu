@@ -194,7 +194,7 @@ int kernel_128() {
 	
 	clock_gettime(CLOCK_REALTIME, &stop);
 	runtime = (stop.tv_sec - start.tv_sec) * 1e9 + (double)(stop.tv_nsec - start.tv_nsec);
-	printf("Runtime = %d us\n", runtime); 
+	//printf("Runtime = %d us\n", runtime); 
 
 
 	/*  3. Copy back and free  */
