@@ -1,0 +1,36 @@
+==========================================
+SLURM_JOB_ID = 6834175
+SLURM_JOB_NODELIST = e07-18
+TMPDIR = /tmp/SLURM_6834175
+==========================================
+---- Iter: 0 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 1 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 2 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 3 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 4 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 5 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 6 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 7 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 8 ----
+TotalTime = -1801638736 us
+cudaSuccess
+---- Iter: 9 ----
+TotalTime = -1801638736 us
+cudaSuccess
+Average Total Time: 100761 us
