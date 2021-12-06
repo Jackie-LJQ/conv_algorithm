@@ -54,7 +54,10 @@ int main()
 
     struct timespec start, stop;
     double oneTime, totalTime;
-    size_t totalMem;
+    size_t total_byte, free_byte;
+    float free_m, total_m, used_m;
+    float totalMem;
+
 
     //Mesure effect of different block size
     // printf("blockSize, gridSize, avgTime\n");
@@ -69,17 +72,17 @@ int main()
             }
             totalTime = 0;
             for (int i=0; i < TOTAL_RUN; i++) {
-                size_t avail;
-                size_t total;
                 clock_gettime(CLOCK_REALTIME, &start);
                 im2col<<<gridSize, blockSize>>>(gpu_image, gpu_Colout, ksize, 
                             stride, numWindowPerRow, numWindowPerCol, numWindowPerChannel);
                 clock_gettime(CLOCK_REALTIME, &stop);
-                cudaMemGetInfo(&avail, &total);
-                size_t used = total - avail;
+                cudaMemGetInfo(&free_byte, &total_byte);
                 oneTime = (stop.tv_sec - start.tv_sec) * 1e9 + (double)(stop.tv_nsec - start.tv_nsec);
                 totalTime += oneTime;
-                totalMem += used;
+                free_m = (uint)free_byte/1048576.0;
+                total_m = (uint)total_byte/1048576.0;
+                used_m = total_m - free_m;
+                totalMem += used_m;
             }
             fperflog <<blockSize * gridSize << "," <<  blockSize << ","             
                                       << gridSize << "," << totalTime / TOTAL_RUN
