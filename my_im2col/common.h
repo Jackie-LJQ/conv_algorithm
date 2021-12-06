@@ -11,9 +11,9 @@ typedef struct {
     float* elements;
 } Matrix;
 
-void init_data(Matrix &data, int size) {
+void init_data(float *data, int size) {
     for (int i=0; i<size; i++) {
-        data.elements[i] = (float) i;
+        data[i] = (float) i;
     }
 }
 
@@ -25,7 +25,7 @@ void generate_data(Matrix &image, Matrix &kernel, int height, int width,
     image.batch_size = batch_size;
     int imageSize = height*width*channels*batch_size;
     image.elements = (float*)malloc(imageSize * channels * sizeof(float));
-    init_data(image, imageSize);
+    init_data(image.elements, imageSize);
 
     kernel.width = ksize;
     kernel.height = ksize;
@@ -33,9 +33,16 @@ void generate_data(Matrix &image, Matrix &kernel, int height, int width,
     kernel.batch_size = 1;
     int kernelSize = ksize * ksize * num_kernels;
     kernel.elements = (float*) malloc(kernelSize * sizeof(float));
-    init_data(kernel, kernelSize);
+    init_data(kernel.elements, kernelSize);
+    // std::cout<<kernel.elements[0];
 }
 
+
+
+void free_data(Matrix &image, Matrix &kernel) {
+    free(image.elements);
+    free(kernel.elements);
+}
 
 void transferToDevice(Matrix &a, Matrix &gpu_a) {
     gpu_a.width = a.width;
