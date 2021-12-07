@@ -5,4 +5,4 @@
 #SBATCH --output=out.txt
 #SBATCH --error=err.txt
 #SBATCH --gres=gpu:1
-./im2col.out
+./mec.out

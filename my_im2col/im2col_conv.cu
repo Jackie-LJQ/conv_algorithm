@@ -1,16 +1,16 @@
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
-#include "common.h"
+#include "../common.h"
 #include <time.h>
 #include <sys/time.h>
 #define TOTAL_RUN 1
-#define MATMUL_BLOCKSIZE 2
+#define MATMUL_BLOCKSIZE 3
 
 void im2colOnHost(Matrix&, Matrix&, int, int, int);
 __global__ void im2col(Matrix, Matrix, int, int, int, int, int);
 int program(int gridSize, int blockSize,  int height, int width,
-	int channels, int batch_size, int ksize, int num_kernels, int pad, int stride);
+	int channels, int batch_size, int ksize, int num_kernels, int pad, int stride, size_t&);
 __global__ void blockMatrixMul(Matrix gpu_colin, Matrix gpu_kernel, Matrix gpu_colout);
 
 int main() {
@@ -27,6 +27,7 @@ int main() {
 	int stride = 1; // 1
     struct timeval start;
     struct timeval stop;
+    size_t used;
     double oneTime=0;
     double totalTime=0;
     int numWindowPerRow = (width - ksize) / stride + 1;
@@ -46,16 +47,18 @@ int main() {
             }
             totalTime = 0;
             for (int i=0; i < TOTAL_RUN; i++) {
+                
                 gettimeofday(&start, NULL);
                 program(gridSize, blockSize, height, width, channels, batch_size, ksize, 
-                num_kernels, pad, stride);
+                num_kernels, pad, stride, used);
                 gettimeofday(&stop, NULL);
                 oneTime = (stop.tv_sec - start.tv_sec) * 1000.0;
                 oneTime += (stop.tv_usec - start.tv_usec) / 1000.0;
                 totalTime += oneTime;
             }
             fperflog <<blockSize * gridSize << "," <<  blockSize << ","             
-                                      << gridSize << "," << totalTime / TOTAL_RUN << std::endl;
+                                      << gridSize << "," << totalTime / TOTAL_RUN << "," 
+                                      << used / (TOTAL_RUN * 1e6) << std::endl;
             break; //debug
         }
         break; //debug
@@ -66,7 +69,7 @@ int main() {
 
 //Host code
 int program(int gridSize, int blockSize,  int height, int width,
-	int channels, int batch_size, int ksize, int num_kernels, int pad, int stride)
+	int channels, int batch_size, int ksize, int num_kernels, int pad, int stride, size_t & used)
 {
     Matrix image;
     Matrix kernel;
@@ -77,7 +80,7 @@ int program(int gridSize, int blockSize,  int height, int width,
 
     transferToDevice(image, gpu_image);
     transferToDevice(kernel, gpu_kernel);
-
+    printMatrix(kernel, "kernel");
     Matrix gpu_colin;
     gpu_colin.width = ksize * ksize; //width of each row = kernel size
     int numWindowPerRow = (gpu_image.width - ksize) / stride + 1;
@@ -87,11 +90,14 @@ int program(int gridSize, int blockSize,  int height, int width,
     gpu_colin.height = kernelNum; //KERNEL_NUM
     gpu_colin.channels = 1;
     gpu_colin.batch_size = 1;
+    size_t avail;
+    size_t total;
     cudaMalloc((void**) &gpu_colin.elements, sizeof(float)*gpu_colin.height * gpu_colin.width * gpu_colin.channels);  
     im2col<<<gridSize, blockSize>>>(gpu_image, gpu_colin, ksize, 
                             stride, numWindowPerRow, numWindowPerCol, numWindowPerChannel);
 
-    
+    cudaMemGetInfo(&avail, &total);
+    used = total - avail;
     // /**
     //For debug: compare serial result on host and multi-thread result on gpu
     Matrix colOutDev;    
@@ -124,7 +130,7 @@ int program(int gridSize, int blockSize,  int height, int width,
     // int xx = gpu_colin.height / MATMUL_BLOCKSIZE;
     // int cc = num_kernels / MATMUL_BLOCKSIZE;
     // std::cout << cc << " " << xx << std::endl;
-    dim3 dimGrid(gpu_colin.height / MATMUL_BLOCKSIZE, num_kernels / MATMUL_BLOCKSIZE);
+    dim3 dimGrid(gpu_colin.height / MATMUL_BLOCKSIZE + 1, num_kernels / MATMUL_BLOCKSIZE + 1);
     blockMatrixMul<<<dimGrid, dimBlock>>>(gpu_colin, gpu_kernel, gpu_colout);
 
     Matrix a;
@@ -207,26 +213,35 @@ __global__ void blockMatrixMul(Matrix gpu_colin, Matrix gpu_kernel, Matrix gpu_c
     // coordinates of block
     int blockRow_k = blockIdx.y; //row index of kernel marix
     int blockRow_c = blockIdx.x; //row index of gpu_colin matrix 
-    printf("blockRow_k, blockRow_c: %d %d\n", blockRow_k, blockRow_c);
+    // printf("blockRow_k, blockRow_c: %d %d\n", blockRow_k, blockRow_c);
     //coordinates of element in block
     int row = threadIdx.y;
     int col = threadIdx.x; //(gpu_colin.width / MATMUL_BLOCKSIZE)
-    for (int m=0; m < 1; m++) {
+    int coloutIdy = blockRow_k * blockDim.y + row;
+    int coloutIdx = blockRow_c * blockDim.x + col;
+    for (int m=0; m < gpu_colin.width / MATMUL_BLOCKSIZE + 1; m++) {
         __shared__ float As[MATMUL_BLOCKSIZE][MATMUL_BLOCKSIZE];
         __shared__ float Bs[MATMUL_BLOCKSIZE][MATMUL_BLOCKSIZE];
         int Aindy = blockRow_k * blockDim.y + row;
         int Aindx = m * blockDim.x + col;
         As[row][col] = gpu_colin.elements[Aindy * gpu_colin.width + Aindx];
-        int Bindy = blockRow_c * blockDim.y + row;
+        int Bindy = blockRow_c * blockDim.x + row;
         int Bindx = m * blockDim.x + col;
         Bs[row][col] = gpu_kernel.elements[Bindy * gpu_colin.width + Bindx];
         __syncthreads();
-        printf("Bs, %d %d,  %f \n", row, col, Bs[row][col]);
-        for (int e=0; e < blockDim.x; e++) {
+        // printf("Bs, %d %d,  %f \n", row, col, Bs[row][col]);
+        int breakPoint;
+        if (m==gpu_colin.width / MATMUL_BLOCKSIZE) {
+            breakPoint = gpu_colin.width % MATMUL_BLOCKSIZE;
+        }
+        else {
+            breakPoint = blockDim.x;
+        }
+        for (int e=0; e < breakPoint; e++) {
             gpu_colout.elements[
-                (blockRow_k + row) * gpu_colout.width 
-                + blockRow_c + row ] += As[row][e] * Bs[col][e];
-            printf("%d %d, As %f, Bs %f \n", blockRow_k + row, blockRow_c + row, As[row][e], Bs[row][e]);
+                coloutIdy * gpu_colout.width + coloutIdx] += As[col][e] * Bs[row][e];
+            printf("%d_%d, %d-%d, As  %d %d /%f, Bs %d %d /%f \n", coloutIdy, coloutIdx, blockRow_k, blockRow_c, 
+            col, e, As[col][e], row, e, Bs[row][e]);
         }        
     }
 
