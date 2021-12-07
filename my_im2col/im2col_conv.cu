@@ -71,6 +71,7 @@ int main()
                 continue;
             }
             totalTime = 0;
+            totalMem = 0;
             for (int i=0; i < TOTAL_RUN; i++) {
                 clock_gettime(CLOCK_REALTIME, &start);
                 im2col<<<gridSize, blockSize>>>(gpu_image, gpu_Colout, ksize, 
@@ -86,7 +87,7 @@ int main()
             }
             fperflog <<blockSize * gridSize << "," <<  blockSize << ","             
                                       << gridSize << "," << totalTime / TOTAL_RUN
-                                      << "," << totalMem / (TOTAL_RUN * 1e6) << std::endl;
+                                      << "," << totalMem / TOTAL_RUN << std::endl;
         }
     }
     fperflog.close();
