@@ -11,6 +11,8 @@ typedef struct {
     float* elements;
 } Matrix;
 
+void printMatrix(Matrix &, std::string);
+
 void init_data(Matrix &data, int size) {
     for (int i=0; i<size; i++) {
         data.elements[i] = (float) i;
@@ -34,6 +36,7 @@ void generate_data(Matrix &image, Matrix &kernel, int height, int width,
     int kernelSize = ksize * ksize * num_kernels;
     kernel.elements = (float*) malloc(kernelSize * sizeof(float));
     init_data(kernel, kernelSize);
+    printMatrix(kernel, "kernel");
 }
 
 
@@ -82,3 +85,27 @@ void printMatrix(Matrix &A, std::string name) {
     }
     std::cout << "\n";
 }
+
+// __global__ void blockMatrixMul(Matrix gpu_colin, Matrix gpu_kernel, Matrix gpu_colout) {
+//     // coordinates of block
+//     int blockRow = blockIdx.y;
+//     int blockCol = blockIdx.x;
+//     //coordinates of element in block
+//     int row = threadIdx.y;
+//     int col = threadIdx.x;
+//     for (int m=0; m < (gpu_colin.height / MATMUL_BLOCKSIZE); m++) {
+//         __shared__ float As[MATMUL_BLOCKSIZE][MATMUL_BLOCKSIZE];
+//         __shared__ float Bs[MATMUL_BLOCKSIZE][MATMUL_BLOCKSIZE];
+//         int Aindy = blockRow * blockDim.y + row;
+//         int Aindx = m * blockDim.x + col;
+//         As[row][col] = gpu_colin.elements[Aindy * gpu_colin.height + Aindx];
+//         int Bindy = m * blockDim.y + row;
+//         int Bindx = blockCol * blockDim.x + col;
+//         Bs[row][col] = gpu_kernel.elements[Bindy * gpu_kernel.width + Bindx];
+//         __syncthreads();
+//         for (int e=0; e < blockDim.x; e++) {
+//             gpu_colout.elements[Aindy * gpu_colout.width + Bindx] += As[row][e] * Bs[e][col];
+//         }        
+//     }
+
+// }

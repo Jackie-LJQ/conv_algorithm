@@ -3,7 +3,7 @@
 #SBATCH --mem=2GB
 #SBATCH --nodes=1
 #SBATCH --time=02:00:00
-#SBATCH --output=im2col.out
-#SBATCH --error=im2col.err
+#SBATCH --output=out.txt
+#SBATCH --error=err.txt
 #SBATCH --gres=gpu:1
-./a.out
+./im2col.out
