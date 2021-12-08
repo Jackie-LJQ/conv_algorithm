@@ -34,7 +34,7 @@ int main() {
     gpu_colin.channels = 1;
     gpu_colin.batch_size = 1;
     cudaMalloc((void**) &gpu_colin.elements, sizeof(float)*gpu_colin.height * gpu_colin.width * gpu_colin.channels);  
-    mec<<<2, 3>>>(gpu_image, gpu_colin, ksize);
+    mec<<<5, 8>>>(gpu_image, gpu_colin, ksize);
     printMatrix(image, "image");
     Matrix cpu_colin;
     cpu_colin.width = gpu_colin.width;
@@ -60,7 +60,9 @@ __global__ void mec(Matrix gpu_image, Matrix gpu_colin, int ksize) {
         int imgIdy = colinIdx / ksize;
         gpu_colin.elements[colinIdy * gpu_colin.width + colinIdx] = 
             gpu_image.elements[imgIdy * gpu_image.width + imgIdx];
-
-
     }
+}
+
+__global__ void matmul(Matrix gpu_colin, Matrix gpu_kernel) {
+    
 }

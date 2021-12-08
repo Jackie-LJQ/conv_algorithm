@@ -1,5 +1,5 @@
 import numpy as np
-from scipy import signal
+
 
 height, width, channels = 4, 4, 1
 ksize, num_kernel = 3, 4
@@ -15,11 +15,24 @@ def gen_data(data):
                 tmp+=1
     # print(np.ravel(data))
 
+def convolution2d(image, kernel, bias):
+    m, n = kernel.shape
+    if (m == n):
+        y, x = image.shape
+        y = y - m + 1
+        x = x - m + 1
+        new_image = np.zeros((y,x))
+        for i in range(y):
+            for j in range(x):
+                new_image[i][j] = np.sum(image[i:i+m, j:j+m]*kernel) + bias
+    return new_image
+
+
 gen_data(input)
 gen_data(kernel)
 res = np.empty((num_kernel, height-ksize+1, width-ksize+1))
 for index in range(num_kernel):
-    res[index] = signal.convolve2d(input[0], kernel[index], mode="valid")
+    res[index] = convolution2d(input[0], kernel[index], 0)
 
 print(input)
 

@@ -5,7 +5,7 @@
 #include <time.h>
 #include <sys/time.h>
 #define TOTAL_RUN 1
-#define MATMUL_BLOCKSIZE 3
+#define MATMUL_BLOCKSIZE 2
 
 void im2colOnHost(Matrix&, Matrix&, int, int, int);
 __global__ void im2col(Matrix, Matrix, int, int, int, int, int);
@@ -217,32 +217,37 @@ __global__ void blockMatrixMul(Matrix gpu_colin, Matrix gpu_kernel, Matrix gpu_c
     //coordinates of element in block
     int row = threadIdx.y;
     int col = threadIdx.x; //(gpu_colin.width / MATMUL_BLOCKSIZE)
-    int coloutIdy = blockRow_k * blockDim.y + row;
-    int coloutIdx = blockRow_c * blockDim.x + col;
-    for (int m=0; m < gpu_colin.width / MATMUL_BLOCKSIZE + 1; m++) {
+    int coloutIdx = blockRow_k * blockDim.y + row;
+    int coloutIdy = blockRow_c * blockDim.x + col;
+    for (int m=0; m < gpu_colin.width / MATMUL_BLOCKSIZE; m++) {
         __shared__ float As[MATMUL_BLOCKSIZE][MATMUL_BLOCKSIZE];
         __shared__ float Bs[MATMUL_BLOCKSIZE][MATMUL_BLOCKSIZE];
-        int Aindy = blockRow_k * blockDim.y + row;
+        int Aindy = blockRow_c * blockDim.x + row;
         int Aindx = m * blockDim.x + col;
+
+        int Bindy = blockRow_k * blockDim.y + row;
+        int Bindx = m * blockDim.x + col;        
+        if (Aindx >= gpu_colin.width || Aindy >= gpu_colin.height || 
+            Bindx >= gpu_colin.width || Bindy >= gpu_kernel.channels) {
+                return;
+            }
         As[row][col] = gpu_colin.elements[Aindy * gpu_colin.width + Aindx];
-        int Bindy = blockRow_c * blockDim.x + row;
-        int Bindx = m * blockDim.x + col;
         Bs[row][col] = gpu_kernel.elements[Bindy * gpu_colin.width + Bindx];
         __syncthreads();
         // printf("Bs, %d %d,  %f \n", row, col, Bs[row][col]);
-        int breakPoint;
-        if (m==gpu_colin.width / MATMUL_BLOCKSIZE) {
-            breakPoint = gpu_colin.width % MATMUL_BLOCKSIZE;
-        }
-        else {
-            breakPoint = blockDim.x;
-        }
-        for (int e=0; e < breakPoint; e++) {
+        // int breakPoint;
+        // if (m==gpu_colin.width / MATMUL_BLOCKSIZE) {
+        //     breakPoint = gpu_colin.width % MATMUL_BLOCKSIZE;
+        // }
+        // else {
+        //     breakPoint = blockDim.x;
+        // }
+        for (int e=0; e < blockDim.x; e++) {
             gpu_colout.elements[
-                coloutIdy * gpu_colout.width + coloutIdx] += As[col][e] * Bs[row][e];
-            printf("%d_%d, %d-%d, As  %d %d /%f, Bs %d %d /%f \n", coloutIdy, coloutIdx, blockRow_k, blockRow_c, 
-            col, e, As[col][e], row, e, Bs[row][e]);
+                coloutIdy * gpu_colout.width + coloutIdx] += As[row][e] * Bs[col][e];
+            printf("%d_%d, %d-%d, As  %d %d /%f, Bs %d %d /%f \n", 
+            coloutIdy, coloutIdx, blockRow_k, blockRow_c, 
+            row, e, As[row][e], col, e, Bs[col][e]);
         }        
     }
-
 }
