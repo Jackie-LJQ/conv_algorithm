@@ -1,12 +1,43 @@
+#include <iostream>
+#include <fstream>
 #include <stdlib.h>
 #include "../common.h"
 #include <time.h>
-#include "./im2col_common.h"
+#include <sys/time.h>
+#include "im2col_common.h"
 
+int main() {
+    int gridSize = 4;
+    int blockSize = 4;
+    int channels = 3;
+    int batch_size = 1;
+    int ksize = 3;
+    int num_kernels = 16;
+    int pad = 1;
+    int stride = 1;
+    size_t used;
+    size_t totalMem;
+    int height;
+    int width;
+    std::fstream fperflog("perflogMem.csv", std::ios::out);
+    fperflog << "inputSize,memUsage" << std::endl;
+    for (int input_size=16; input_size <= 2048; input_size *=2) {
+        height = input_size;
+        width = input_size;
+        totalMem = 0;
 
+        for (int i=0; i<TOTAL_RUN; i++) {
+            used = 0;
+            program(gridSize, blockSize, height, width, channels, batch_size, ksize, 
+                num_kernels, pad, stride, used);
+            totalMem += used;
+        }
+        fperflog <<input_size << "," << totalMem / (TOTAL_RUN * 1e6) << std::endl;        
+    }
 
+    return 0;
+}
 
-//Host code
 int program(int gridSize, int blockSize,  int height, int width,
 	int channels, int batch_size, int ksize, int num_kernels, int pad, int stride, size_t & used)
 {
